@@ -1,0 +1,560 @@
+---
+title: "STATS 506 - Problem Set 4"
+author: "Mina Dao"
+format: html
+editor: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Loading Packages
+
+```{r, warning = FALSE, message = FALSE}
+library(dplyr)
+library(plotly)
+library(tidyverse)
+```
+
+## Problem 1 - OOP Programming
+
+#### a. define `waldCI` class
+
+* constructor
+
+```{r}
+setClass("waldCI", 
+         slots = c(mean = "numeric",
+                   se = "numeric",
+                   lower = "numeric",
+                   upper = "numeric",
+                   conf = "numeric"))
+
+waldCI <- function(mean = NULL, se = NULL, lower = NULL, upper = NULL, conf = 0.95) {
+  has_mean_se <- !is.null(mean) && !is.null(se)
+  has_bounds <- !is.null(lower) && !is.null(upper)
+  
+  if (has_mean_se) {
+    z <- qnorm(1 - (1 - conf) / 2)
+    margin_error <- z * se
+    calc_lower <- mean - margin_error
+    calc_upper <- mean + margin_error
+  
+    result <- new("waldCI", 
+                  mean = mean, 
+                  se = se, 
+                  lower = calc_lower, 
+                  upper = calc_upper, 
+                  conf = conf)
+  }
+  
+  if (has_bounds) {
+    calc_mean <- (lower + upper) / 2
+    z <- qnorm(1 - (1 - conf) / 2)
+    calc_se <- (upper - lower) / (2 * z)
+    
+    result <- new("waldCI", 
+                  mean = calc_mean, 
+                  se = calc_se, 
+                  lower = lower, 
+                  upper = upper, 
+                  conf = conf)
+  }
+  
+  return(result)
+}
+
+
+```
+
+* `as.numeric` to return `c(lb, ub)` for a given `level`
+```{r}
+setMethod("as.numeric", signature(x = "waldCI"),
+  function(x, level = x@conf, ...) {
+    if (level <= 0 || level >= 1) {
+      stop("Level must be between 0 and 1")
+    }
+    if (level != x@conf) {
+      z <- qnorm(1 - (1 - level) / 2)
+      margin_error <- z * x@se
+      curr_lower <- x@mean - margin_error
+      curr_upper <- x@mean + margin_error
+    } else {
+      curr_lower <- x@lower
+      curr_upper <- x@upper
+    }
+    currCI <- c(curr_lower, curr_upper)
+    return(currCI)
+  }) 
+```
+
+* validator
+```{r}
+setValidity("waldCI", function(object) {
+  errors <- character()
+  
+  has_mean_se <- !is.null(object@mean) && !is.null(object@se)
+  has_bounds <- !is.null(object@lower) && !is.null(object@upper)
+  
+  if (!has_mean_se && !has_bounds) {
+    errors <- c(errors, "Must provide either (mean and se) or (lower and upper bounds)")
+  }
+  
+  if (has_mean_se && has_bounds) {
+    z <- qnorm(1 - (1 - object@conf) / 2)
+    margin_error <- z * object@se
+    calc_lower <- object@mean - margin_error
+    calc_upper <- object@mean + margin_error
+    
+    # float inconsistency
+    if (abs(calc_lower - object@lower) > 1e-10 || abs(calc_upper - object@upper) > 1e-10) {
+      errors <- c(errors, "Bounds are not consistent with mean and se")
+    }
+  }
+  
+  if (object@conf <= 0 || object@conf >= 1) {
+    errors <- c(errors, paste("@conf = ", object@conf, "is not between 0 and 1"))
+    
+  }
+  if (object@lower >= object@upper) {
+    errors <- c(errors, paste("@lower = ", object@lower, "is larger than @upper = ", object@upper))
+  }
+  
+  if (object@se < 0) {
+    errors <- c(errors, paste("@se = ", object@se, "is negative"))
+  }
+  
+  if (length(errors) == 0) {
+    return(TRUE)
+  } else {
+    paste(errors, collapse = ", ")
+  }
+})
+
+```
+
+
+* `show` method
+```{r}
+# add more arguments to generic `show`
+setGeneric("show",
+           function(object, ...) {
+             standardGeneric("show")
+           })
+
+##' @title Display a `waldCI` object
+##' @param object A `waldCI` object,  
+##' @param level confidence level of the object
+##' @param digits number of displayed digits
+setMethod("show", "waldCI",
+  function(object, level = object@conf, digits = 4) {
+    # validate display level
+    if (level <= 0 || level >= 1) {
+      stop("Level must be between 0 and 1")
+    }
+    
+    # calculate the bounds for different level 
+    disp_bounds <- as.numeric(object, level)
+    # output
+    cat("Wald Confidence Interval\n")
+    cat("Mean: ", round(object@mean, digits), "\n", sep = "")
+    cat("Standard Error: ", round(object@se, digits), "\n", sep = "")
+    
+    cat(object@conf * 100, "% confidence interval: [", round(object@lower, digits), ", ", round(object@upper, digits), "]\n", sep = "")
+    
+    if (level != object@conf) {
+      cat(level * 100, "% confidence interval: [", round(disp_bounds[1], digits), ", ", round(disp_bounds[2], digits), "]\n", sep = "")
+    }
+    
+    return(invisible(object))
+  }
+)
+```
+
+
+* assessors
+```{r}
+# lb 
+setGeneric("lb",
+           function(object,...) {
+             standardGeneric("lb")
+           })
+
+##' @title return the lower bound of a `waldCI` object 
+##' @param object A `waldCI` object  
+##' @return the lower bound
+setMethod("lb", "waldCI",
+  function(object, level = object@conf) {
+    if (level != object@conf) {
+      curr_bounds <- as.numeric(object, level)
+      return(curr_bounds[1])
+    }
+    return(slot(object, "lower"))
+  })
+
+# ub
+setGeneric("ub",
+           function(object,...) {
+             standardGeneric("ub")
+           })
+
+##' @title return the upper bound of a `waldCI` object
+##' @param object A `waldCI` object
+##' @return the upper bound
+setMethod("ub", "waldCI",
+  function(object, level = object@conf) {
+    if (level != object@conf) {
+      curr_bounds <- as.numeric(object, level)
+      return(curr_bounds[2])
+    }
+    return(slot(object, "upper"))
+  })
+```
+
+
+```{r}
+# mean
+setGeneric("mean",
+           function(object) {
+             standardGeneric("mean")
+           })
+##' @title return the mean of a `waldCI` object
+##' @param object A `waldCI` object
+##' @return the mean
+setMethod("mean", "waldCI",
+  function(object) {
+    return(slot(object, "mean"))
+  }) 
+
+# sterr
+setGeneric("sterr",
+           function(object) {
+             standardGeneric("sterr")
+           })
+##' @title return the sterr of a `waldCI` object
+##' @param object A `waldCI` object
+##' @return the sterr
+setMethod("sterr", "waldCI",
+  function(object) {
+    return(slot(object, "se"))
+  }) 
+
+# level
+setGeneric("level",
+           function(object) {
+             standardGeneric("level")
+           })
+##' @title return the level of a `waldCI` object
+##' @param object A `waldCI` object
+##' @return the confidence level
+setMethod("level", "waldCI",
+  function(object) {
+    return(slot(object, "conf"))
+  }) 
+```
+
+* setters
+```{r}
+# lb
+setGeneric("lb<-",
+           function(object, value) {
+             standardGeneric("lb<-")
+           })
+
+##' @title set the lower bound of a `waldCI` object
+##' @param object a `waldCI` object
+##' @param value new bound
+##' @return the updated object
+setMethod("lb<-", "waldCI",
+  function(object, value) {
+    # update value
+    object@lower <- value
+    
+    # update object 
+    z <- qnorm(1 - (1 - object@conf) / 2)
+    margin_error <- z * object@se
+    object@mean <- value + margin_error
+    object@upper <- object@mean + margin_error
+    
+    validObject(object) # re-run validity check
+    return(object)
+  }
+)
+
+# ub
+setGeneric("ub<-",
+           function(object, value) {
+             standardGeneric("ub<-")
+           })
+
+##' @title set the lower bound of a `waldCI` object
+##' @param object a `waldCI` object
+##' @param value new bound
+##' @return the updated object
+setMethod("ub<-", "waldCI",
+  function(object, value) {
+    # update value
+    object@upper <- value
+    
+    # update object
+    z <- qnorm(1 - (1 - object@conf) / 2)
+    margin_error <- z * object@se
+    object@mean <- value + margin_error
+    object@lower <- object@mean - margin_error
+    
+    validObject(object) # re-run validity check
+    return(object)
+  }
+)
+```
+
+
+```{r}
+# mean
+setGeneric("mean<-",
+           function(object, value) {
+             standardGeneric("mean<-")
+           })
+
+##' @title set the mean of a `waldCI` object
+##' @param object a `waldCI` object
+##' @param value new mean
+##' @return the updated object
+setMethod("mean<-", "waldCI",
+  function(object, value) {
+    # update value
+    object@mean <- value
+    
+    # update object
+    z <- qnorm(1 - (1 - object@conf) / 2)
+    margin_error <- z * object@se
+    object@lower <- object@mean - margin_error
+    object@upper <- object@mean + margin_error
+    
+    validObject(object) # re-run validity check
+    return(object)
+  }
+)
+
+# sterr
+setGeneric("sterr<-",
+           function(object, value) {
+             standardGeneric("sterr<-")
+           })
+
+##' @title set the sterr of a `waldCI` object
+##' @param object a `waldCI` object
+##' @param value new sterr
+##' @return the updated object
+setMethod("sterr<-", "waldCI",
+  function(object, value) {
+    # update value
+    object@se <- value
+    
+    # update object
+    z <- qnorm(1 - (1 - object@conf) / 2)
+    margin_error <- z * object@se
+    object@lower <- object@mean - margin_error
+    object@upper <- object@mean + margin_error
+    
+    validObject(object) # re-run validity check
+    return(object)
+  }
+)
+
+# level
+setGeneric("level<-",
+           function(object, value) {
+             standardGeneric("level<-")
+           })
+
+##' @title set the level of a `waldCI` object
+##' @param object a `waldCI` object
+##' @param value new level
+##' @return the updated object
+setMethod("level<-", "waldCI",
+  function(object, value) {
+    # update value
+    object@conf <- value
+    
+    # update object
+    z <- qnorm(1 - (1 - object@conf) / 2)
+    margin_error <- z * object@se
+    object@lower <- object@mean - margin_error
+    object@upper <- object@mean + margin_error
+    
+    validObject(object) # re-run validity check
+    return(object)
+  }
+)
+```
+
+* `contains` method
+```{r}
+setGeneric("contains",
+           function(object, value, level = object@level) {
+             standardGeneric("contains")
+           })
+
+##' @title checking whether a value is within a CI of a `waldCI` object
+##' @param object a `waldCI` object
+##' @param value value to check
+##' @param level confidence level of the CI
+##' @return a logical
+setMethod("contains", "waldCI",
+  function(object, value, level = object@conf) {
+    curr_bounds <- as.numeric(object, level)
+    curr_lb <- curr_bounds[1]
+    curr_ub <- curr_bounds[2]
+    if (value <= curr_ub && value >= curr_lb) {
+      return(TRUE)
+    }
+    return(FALSE)
+  }
+)
+```
+
+* `overlap` method
+```{r}
+setGeneric("overlap",
+           function(object1, object2, level = NULL) {
+             standardGeneric("overlap")
+           })
+
+##' @title checking whether two `waldCI` objects have overlapping intervals
+##' @param object1 a `waldCI` object
+##' @param object2 a `waldCI` object
+##' @param level confidence level 
+##' @return a logical 
+setMethod("overlap", "waldCI",
+  function(object1, object2, level = NULL) {
+    if (!is.null(level)) {
+      object1_bounds <- as.numeric(object1, level)
+      object1_lb <- object1_bounds[1]
+      object1_ub <- object1_bounds[2]
+      
+      object2_bounds <- as.numeric(object2, level)
+      object2_lb <- object2_bounds[1]
+      object2_ub <- object2_bounds[2]
+    } else {
+      object1_lb <- object1@lower
+      object1_ub <- object1@upper
+      object2_lb <- object2@lower
+      object2_ub <- object2@upper
+    }  
+      
+    if (object1_lb < object2_lb) {
+      if(object1_ub >= object2_lb) {
+        return(TRUE)
+      } else {
+        return(FALSE)
+      }
+    }
+    
+    if (contains(object2, object1_lb)) {
+      return(TRUE)
+    }
+    
+    if (object1_lb > object2_ub) {
+      return(FALSE)
+    }
+})
+```
+
+* `transformCI` function 
+
+```{r}
+setGeneric("transformCI", 
+           function(object, FUN) {
+             standardGeneric("transformCI")
+           })
+setMethod("transformCI", "waldCI",
+  function(object, FUN) {
+    if (!is.function(FUN)) {
+      cat(FUN, " is not a function", sep = "")
+      stop()
+    }
+    
+    # check if the function is monotonic on the interval
+    test_interval <- seq(object@lower, object@upper, length.out = 10)
+    test_vals <- FUN(test_interval)
+    
+    if (!(all(diff(test_vals) >= 0) || !(all(diff(test_vals) <= 0)))) {
+      warning("Function is not monotonic on the confidence interval")
+    }
+    
+    # transform the bound
+    new_lb <- FUN(object@lower)
+    new_ub <- FUN(object@upper)
+    new_mean <- FUN(object@mean)
+    
+    # transform the standard error by taking derivatives
+    h <- 1e-10  
+    derivative <- (FUN(object@mean + h) - FUN(object@mean)) / h
+    new_se <- abs(derivative) * object@se
+    
+    result <- waldCI(
+      lower = min(new_lb, new_ub),
+      upper = max(new_lb, new_ub),
+      se = new_se,
+      mean = new_mean,
+      conf = object@conf
+    )
+    return(result)
+  })
+```
+
+
+#### b. Create objects
+
+```{r}
+ci1 <- waldCI(lower = 17.2, upper = 24.7)
+ci2 <- waldCI(mean = 12, se = 2.5, conf = 0.99)
+ci3 <- waldCI(lower = 27.43, upper = 39.22, conf = 0.75)
+```
+Evaluate the code
+
+```{r}
+ci1
+ci2
+ci3
+as.numeric(ci1)
+as.numeric(ci2)
+as.numeric(ci3)
+lb(ci2)
+ub(ci2)
+mean(ci1)
+sterr(ci3)
+level(ci2)
+lb(ci2) <- 10.5
+mean(ci3) <- 34
+level(ci3) <- .8
+contains(ci1, 17)
+contains(ci3, 44)
+overlap(ci1, ci2)
+eci1 <- transformCI(ci1, sqrt)
+eci1
+mean(transformCI(ci2, log))
+```
+
+#### c. Show the validator does not allow creation of invalid confidence intervals
+
+```{r}
+ci4 <- waldCI(mean = 2.5, se = -2)
+ci5 <- waldCI(lower = 2, upper = 1)
+
+```
+
+
+
+
+Distribution of sources:
+
+1. Using R to Find Confidence Intervals
+https://chem.libretexts.org/Bookshelves/Analytical_Chemistry/Chemometrics_Using_R_(Harvey)/06%3A_Uncertainty_of_Data/6.04%3A_Using_R_to_Find_Confidence_Intervals
+2. Back-transform Standard Error https://vsni.co.uk/back-transform-standard-error/
+
+ 
