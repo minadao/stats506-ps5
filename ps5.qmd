@@ -1,5 +1,5 @@
 ---
-title: "STATS 506 - Problem Set 4"
+title: "STATS 506 - Problem Set 5"
 author: "Mina Dao"
 format: html
 editor: 
@@ -15,7 +15,6 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r, warning = FALSE, message = FALSE}
 library(dplyr)
-library(ggplot2)
 library(plotly)
 library(tidyverse)
 ```
