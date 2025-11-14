@@ -704,7 +704,7 @@ covid_data <- covid_data %>%
 
 #### a.
 
-```{r, warning = FALSE, fig.width=8, fig.height=6}}
+```{r, warning = FALSE, fig.width=8, fig.height=6}
 us_states_date <- covid_data%>%
   group_by(date) %>%
   summarise(total_cases = sum(cases))
@@ -746,7 +746,7 @@ I can detect 4 major spikes and 3 minor spikes.
 
 ## b. 
 
-```{r}
+```{r, fig.width=8, fig.height=6}
 covid_state <- covid_data %>%
   group_by(state) %>%
   summarize(total = sum(cases_avg_per_100k)) %>%
@@ -772,7 +772,7 @@ p_plotly <- plot_ly(covid_state, x = ~total, y = ~state) %>%
     type = "scatter",
     mode = "text",
     text = ~state,
-    textposition = ~ifelse(total > 37500, "middle left", "middle right"),
+    textposition = ~ifelse(total > 40000, "middle left", "middle right"),
     textfont = list(size = 12),
     showlegend = FALSE
   ) %>%
@@ -794,7 +794,7 @@ p_plotly
 
 We can see that Maine and Rhode Island are the lowest and highest overall.
 
-```{r}
+```{r, fig.width=8, fig.height=6}
 filtered_covid <- covid_data %>% 
   filter(state == "Maine" | state == "Rhode Island")
 
@@ -806,6 +806,8 @@ p2_plotly <- plot_ly(filtered_covid, x = ~date, y = ~cases_avg_per_100k,
     line = list(width = 2)
   ) %>%
   layout(
+    title = (
+      text = "US States with Highest and Lowest Overall Rates Per Population"),
     yaxis = list(title = "COVID cases per 100k"),
     legend = list(
       x = 0.9,      # 90% from left
@@ -823,7 +825,7 @@ In winter 21-22, while the count in Rhode Island increased 10-fold, Maine did no
 
 #### c.
 
-```{r}
+```{r, warning = FALSE, fig.height= 6, fig.width = 8}
 us_states_start <- covid_data %>%
   filter(date > as.Date("2020-03-20"), 
          date < as.Date("2020-04-20"),
@@ -865,5 +867,9 @@ Distribution of sources:
 
 1.  Using R to Find Confidence Intervals
     https://chem.libretexts.org/Bookshelves/Analytical_Chemistry/Chemometrics_Using_R\_(Harvey)/06%3A_Uncertainty_of_Data/6.04%3A_Using_R_to_Find_Confidence_Intervals
+    
 2.  Back-transform Standard Error
     https://vsni.co.uk/back-transform-standard-error/
+    
+3.  Line Plots in R https://plotly.com/r/line-charts/
+
